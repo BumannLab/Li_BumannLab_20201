@@ -1,0 +1,169 @@
+function makeMovie(source_dir,options)
+
+Scale = options.Scale;
+num = options.num_imagepercore;
+
+
+save_dir = fullfile(source_dir, 'resized_volume');
+if ~exist(save_dir)
+    mkdir(save_dir)
+end
+
+
+paramFile=getTiledAcquisitionParamFile;
+param=readMetaData2Stitchit(paramFile); 
+
+for optS =1:length(param.sample.activeChannels)
+    tic;
+    channel = param.sample.activeChannels(optS);
+    if ~exist(fullfile(save_dir, sprintf('%i',channel)))
+        mkdir(fullfile(save_dir, sprintf('%i',channel)))
+    end
+
+    % load images per channel
+    d = dir(fullfile(source_dir, sprintf('%i',channel), '*.tif'));
+    % 
+     options.ALLfilenames = cell(numel(d),1);
+     for i = 1:numel(d)
+         options.ALLfilenames{i} = fullfile(d(i).folder, d(i).name);
+     end
+
+    NAMES = options.ALLfilenames;
+    fprintf(' Resizing %d images from channel %i\n', ...
+        numel(d), channel);
+
+     % load all the images from the given channel into the memory
+     NAMES_save = cell(numel(d),1);
+     for i = 1:numel(d)
+         NAMES_save{i} = fullfile(save_dir, sprintf('%i',channel), d(i).name);
+     end
+     im = imread(NAMES{1});
+
+     
+     cnt = 1;
+     while cnt<numel(d)
+         if cnt+num > numel(d)
+             steps = numel(d)-cnt;
+         else
+             steps = num;
+         end
+         disp('reading...');
+%          I = cell(1,steps);
+%          parfor z = cnt:cnt+steps
+%                I{z} = imread(NAMES{z});
+%          end
+         
+        II = zeros(size(im,1),size(im,2),steps,'uint16');
+         parfor z = 1:steps
+               im = imread(NAMES{z+cnt});
+               II(:,:,z) = imresize(im,Scale);
+               cnt = cnt+z;
+         end
+         disp('Resize');
+                  I_scale = cell(1,steps);
+         parfor z = cnt:cnt+steps
+               I_scale{z} = imresize(I{z},Scale);
+         end
+         disp('write')
+         parfor zsave = cnt:cnt+steps
+%             im = imresize(I{zsave}, Scale);
+            imwrite(I_scale{zsave},NAMES_save{zsave});
+         end
+         cnt = cnt+steps +1;
+     end
+    fprintf('time per channel %i min',round(toc/60))
+end
+
+    %% Save mask images
+if strcmp(options.show_mask,'show_mask')
+
+    save_dirSegm = fullfile(source_dir, 'resized_ObjectMask'); 
+    if ~exist(save_dirSegm)
+        mkdir(save_dirSegm);
+    end
+    txt_name = fullfile(options.segment_dir,options.positions_filetxt);
+    A = readtable(txt_name);
+    downSample = [Scale,1];
+    fprintf('Downsample in XY by %i and in Z by %i\n',downSample(1),downSample(2));
+
+    resampleXY = [A.X,A.Y].*downSample(1);
+    resampleZ = A.Z.*downSample(2);
+    resampleCoor = [resampleXY,resampleZ]; 
+    illum_norm = nthroot( A.GreenMeanInten,4);
+
+    IM =  imread(NAMES_save{1});
+    [columnsInImage rowsInImage] = meshgrid(1:size(IM,2), 1:size(IM,1));
+
+%     save_segment_high_low = options.separate_HighLow;
+    d = dir(fullfile(options.segment_dir, '*.pbm'));
+    options.ALLfilenames = cell(numel(d),1);
+    for i = 1:numel(d)
+        options.ALLfilenames{i} = fullfile(d(i).folder, d(i).name);
+    end
+
+
+
+for num = 1:numel(d) % number of images or slices
+    ind = find(resampleCoor(:,3) == num);
+%     if save_segment_high_low == 1
+%         segment_image_bright = logical(zeros(size(IM,1), size(IM,2)));
+%         segment_image_low = logical(zeros(size(IM,1), size(IM,2)));
+%         if ~isempty(ind)
+%             for j = 1:length(ind)
+%                 centerX = resampleCoor(ind(j),1);
+%                 centerY = resampleCoor(ind(j),2);
+%                 radius = illum_norm(ind(j));
+%                 circlePixels = (rowsInImage - centerY).^2 ...
+%                     + (columnsInImage - centerX).^2 <= radius.^2;
+%                 if radius > 3
+%                     segment_image_bright = circlePixels+segment_image_bright;
+%     %             figure, imshow(segment_image,[])
+%     %             pause
+%                 else
+%                     segment_image_low = circlePixels+segment_image_low;
+%                 end
+%             end
+%  
+%             filename1 = [save_dirSegm 'high/' sprintf('toxo_illum_%i.tif',num)];
+%             imwrite(uint16(segment_image_bright*2^16-30),filename1)
+%              filename2 = [save_dirSegm 'low/' sprintf('toxo_illum_%i.tif',num)];
+%             imwrite(uint16(segment_image_low*2^16-30),filename2)
+% 
+%         else
+%             filename1 = [save_dirSegm 'high/' sprintf('toxo_illum_%i.tif',num)];
+%             imwrite(uint16(segment_image_bright*2^16-30),filename1)
+%              filename2 = [save_dirSegm 'low/' sprintf('toxo_illum_%i.tif',num)];
+%             imwrite(uint16(segment_image_low*2^16-30),filename2)
+%         end
+%     else
+        segment_image = logical(zeros(size(IM,1), size(IM,2)));
+        if ~isempty(ind)
+            for j = 1:length(ind)
+                centerX = resampleCoor(ind(j),1);
+                centerY = resampleCoor(ind(j),2);
+                radius = illum_norm(ind(j));
+                if radius == 0
+                    radius = 1;
+                end
+                circlePixels = (rowsInImage - centerY).^2 ...
+                    + (columnsInImage - centerX).^2 <= radius.^2;
+
+                segment_image = circlePixels+segment_image;
+          
+            end
+            
+%                  figure, imshow(segment_image,[])
+%                 pause
+            filename = fullfile(save_dirSegm, sprintf('mask_Rillumination_%i.tif',num));
+            imwrite(uint16(segment_image*2^16-30),filename);
+        else 
+            filename = fullfile(save_dirSegm, sprintf('mask_Rillumination_%i.tif',num));
+            imwrite(uint16(segment_image*2^16-30),filename);
+        end
+%     end
+    
+end
+
+end
+
+
