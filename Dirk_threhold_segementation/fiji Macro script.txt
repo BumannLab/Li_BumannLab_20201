@@ -1,0 +1,13 @@
+1.matlab 
+dir ('*tif') %% get the tif file list.
+
+2. Process >> batch >> macro >>
+input dir
+output dir
+file name contains 'tif'
+run("RGB Color");
+run("Enhance Contrast", "saturated=0.35");
+
+3.image to stack
+
+4.stack sort by label.

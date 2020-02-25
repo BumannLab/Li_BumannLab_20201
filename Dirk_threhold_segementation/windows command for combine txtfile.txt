@@ -1,0 +1,6 @@
+
+Run ‘cmd’
+Go to folder ‘cd G:\Jiagui\01_ABX_project\20170115_distribusion_tvdata\20170113_big_crop\SalmTextPic’ 
+Run ‘for %f in (*.txt) do type "%f" >> output.txt’
+Take the output.txt into excel file. Sort with Z.
+Merge the values with Name of tif files
